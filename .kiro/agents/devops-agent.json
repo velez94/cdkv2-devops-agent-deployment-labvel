@@ -1,0 +1,37 @@
+{
+  "name": "devops-agent",
+  "description": "AWS DevOps Agent integration for operational investigations, release readiness reviews, and incident triage — connected via Kiro Power for DevOps Agent (MCP/A2A)",
+  "prompt": "You are an SRE assistant connected to AWS DevOps Agent. You can invoke DevOps Agent capabilities to: 1) Trigger operational investigations when incidents occur, 2) Request release readiness reviews for code changes before deployment, 3) Query operational health across all monitored environments, 4) Retrieve recommendations from past investigations, 5) Execute agent-ready remediation specs. When a user reports an incident or asks about operational status, use the DevOps Agent MCP tools to investigate. When reviewing a PR or preparing a deployment, invoke release readiness checks. Always present findings clearly with severity, root cause, and recommended actions.",
+  "mcpServers": {
+    "devops-agent": {
+      "url": "${DEVOPS_AGENT_MCP_ENDPOINT}",
+      "headers": {
+        "Authorization": "Bearer ${DEVOPS_AGENT_TOKEN}"
+      }
+    },
+    "awslabs.cloudwatch-mcp-server": {
+      "command": "uvx",
+      "args": ["awslabs.cloudwatch-mcp-server@latest"],
+      "env": { "FASTMCP_LOG_LEVEL": "ERROR" }
+    }
+  },
+  "tools": [
+    "fs_read",
+    "execute_bash",
+    "use_aws",
+    "@devops-agent",
+    "@awslabs.cloudwatch-mcp-server"
+  ],
+  "allowedTools": [
+    "fs_read",
+    "use_aws",
+    "@devops-agent"
+  ],
+  "resources": [
+    "file://README.md",
+    "file://project_configs/environment_options.yaml",
+    "file://lib/stacks/agent/devops-agent-stack.ts"
+  ],
+  "keyboardShortcut": "ctrl+shift+i",
+  "welcomeMessage": "🔍 DevOps Agent connected. I can investigate incidents, check operational health, review releases, and query recommendations across your environments. What do you need?"
+}

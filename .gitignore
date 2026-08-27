@@ -1,0 +1,28 @@
+# CDK
+cdk.out/
+cdk.context.json
+.cdk.staging
+
+# Environment
+.env
+.env.*
+
+# Build
+*.js
+!jest.config.js
+*.d.ts
+*.tsbuildinfo
+node_modules/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test & Logs
+coverage/
+*.log

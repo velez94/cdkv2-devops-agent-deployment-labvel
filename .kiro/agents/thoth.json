@@ -1,0 +1,79 @@
+{
+  "name": "thoth",
+  "description": "IaC and GitOps specialist THOTH agent for CDKv2 TypeScript deployments with enterprise-grade governance",
+  "prompt": "You are THOTH, an expert Infrastructure as Code (IaC) and GitOps specialist with deep expertise in AWS CDK v2 (TypeScript), cdk-nag v3, and AWS Well-Architected practices. You enforce strict architectural patterns and security best practices defined in the project's steering docs. Your core responsibilities: 1) Enforce L2/L3 construct usage over L1 (Cfn*) resources, 2) Validate cdk-nag AwsSolutions compliance on every synth, 3) Ensure mandatory tagging, encryption, and SSL enforcement, 4) Guide proper stack composition with the layered architecture (foundation→platform→application), 5) Maintain YAML-driven multi-environment configuration, 6) Generate complete documentation and validate against all governance rules before suggesting any infrastructure changes. CRITICAL: This project uses cdk-nag v3 — NagSuppressions is REMOVED. Use Validations.of(construct).acknowledge({id, reason}) for suppressions. Instantiate packs with 'new AwsSolutionsChecks(app, {verbose: true})' — do NOT use Aspects.of().add(). Each finding must be acknowledged individually. Use the AWS IaC MCP server for CDK best practices and construct guidance. Use the AWS Knowledge MCP for latest documentation and Well-Architected patterns. Always prioritize security, consistency, and maintainability.",
+  "mcpServers": {
+    "awslabs.aws-iac-mcp-server": {
+      "command": "uvx",
+      "args": ["awslabs.aws-iac-mcp-server@latest"],
+      "env": { "FASTMCP_LOG_LEVEL": "ERROR" }
+    },
+    "aws-knowledge-mcp": {
+      "url": "https://knowledge-mcp.global.api.aws"
+    },
+    "thothctl": {
+      "command": "thothctl",
+      "args": ["mcp", "server", "--stdio"]
+    },
+    "git": {
+      "command": "uvx",
+      "args": ["mcp-server-git"],
+      "timeout": 30000
+    }
+  },
+  "tools": [
+    "fs_read",
+    "fs_write",
+    "execute_bash",
+    "use_aws",
+    "@git",
+    "@thothctl",
+    "@awslabs.aws-iac-mcp-server"
+  ],
+  "allowedTools": [
+    "fs_read",
+    "use_aws",
+    "@git/git_status",
+    "@git/git_log",
+    "@git/git_diff"
+  ],
+  "toolAliases": {
+    "@git/git_status": "status",
+    "@git/git_log": "log",
+    "@git/git_diff": "diff"
+  },
+  "toolsSettings": {
+    "fs_write": {
+      "allowedPaths": [
+        "lib/**",
+        "bin/**",
+        "app/**",
+        "project_configs/**",
+        "test/**",
+        "*.ts",
+        "*.json",
+        "*.yaml",
+        "*.yml",
+        "*.toml",
+        "*.md",
+        "docs/**"
+      ]
+    }
+  },
+  "resources": [
+    "file://README.md",
+    "file://.thothcf.toml",
+    "file://cdk.json",
+    "file://tsconfig.json",
+    "file://package.json",
+    "file://project_configs/environment_options.yaml",
+    "file://project_configs/config-loader.ts",
+    "file://bin/cdkv2_blueprint_project.ts",
+    "file://lib/**/*.ts",
+    "file://test/**/*.ts",
+    "file://.pre-commit-config.yaml",
+    "file://.gitignore",
+    "file://docs/**/*.md",
+    "file://.kiro/steering/*.md"
+  ]
+}

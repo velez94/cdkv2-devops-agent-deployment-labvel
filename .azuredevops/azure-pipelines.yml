@@ -1,0 +1,183 @@
+# Azure DevOps Pipeline for CDKv2 DevOps Agent Blueprint
+# Used when pipeline.mode = "azure-devops" in environment_options.yaml
+#
+# Prerequisites:
+# - AWS Service Connection configured in Azure DevOps project settings
+# - Variable group "aws-credentials-{env}" with AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
+#   OR use AWS Toolkit for Azure DevOps with OIDC federation (recommended)
+
+trigger:
+  branches:
+    include:
+      - main
+
+pr:
+  branches:
+    include:
+      - main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  NODE_VERSION: '20'
+  CDK_DEFAULT_REGION: 'us-east-1'
+
+stages:
+  # ─── Stage 1: Validate ───────────────────────────────────────────────
+  - stage: Validate
+    displayName: 'Lint, Test & Synth'
+    jobs:
+      - job: ValidateJob
+        displayName: 'Validate CDK Project'
+        steps:
+          - task: NodeTool@0
+            displayName: 'Install Node.js'
+            inputs:
+              versionSpec: '$(NODE_VERSION)'
+
+          - script: npm ci
+            displayName: 'Install dependencies'
+
+          - script: npm run lint
+            displayName: 'Lint'
+
+          - script: npm run format:check
+            displayName: 'Format check'
+
+          - script: npm run build
+            displayName: 'Build'
+
+          - script: npm test
+            displayName: 'Test (Jest + cdk-nag)'
+
+          - script: npx cdk synth --context env=dev
+            displayName: 'CDK Synth (dev)'
+
+          - task: PublishPipelineArtifact@1
+            displayName: 'Publish CloudFormation templates'
+            inputs:
+              targetPath: 'cdk.out'
+              artifactName: 'cfn-templates'
+
+  # ─── Stage 2: Security Scan ──────────────────────────────────────────
+  - stage: SecurityScan
+    displayName: 'Security Scan'
+    dependsOn: Validate
+    jobs:
+      - job: Checkov
+        displayName: 'Checkov Scan'
+        steps:
+          - task: NodeTool@0
+            inputs:
+              versionSpec: '$(NODE_VERSION)'
+
+          - script: npm ci
+            displayName: 'Install dependencies'
+
+          - script: npx cdk synth --context env=dev
+            displayName: 'CDK Synth'
+
+          - script: |
+              pip install checkov
+              checkov -d cdk.out/ --framework cloudformation --soft-fail
+            displayName: 'Run Checkov'
+
+  # ─── Stage 3: Deploy Dev ─────────────────────────────────────────────
+  - stage: DeployDev
+    displayName: 'Deploy to Dev'
+    dependsOn: SecurityScan
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    variables:
+      - group: aws-credentials-dev
+    jobs:
+      - deployment: DeployDevJob
+        displayName: 'CDK Deploy (dev)'
+        environment: 'dev'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+
+                - task: NodeTool@0
+                  inputs:
+                    versionSpec: '$(NODE_VERSION)'
+
+                - script: npm ci
+                  displayName: 'Install dependencies'
+
+                - task: AWSShellScript@1
+                  displayName: 'CDK Deploy'
+                  inputs:
+                    awsCredentials: 'aws-dev-service-connection'
+                    regionName: '$(CDK_DEFAULT_REGION)'
+                    scriptType: inline
+                    inlineScript: |
+                      npx cdk deploy --all --context env=dev --require-approval never
+
+  # ─── Stage 4: Deploy QA (manual approval via Azure DevOps environment) ─
+  - stage: DeployQA
+    displayName: 'Deploy to QA'
+    dependsOn: DeployDev
+    condition: succeeded()
+    variables:
+      - group: aws-credentials-qa
+    jobs:
+      - deployment: DeployQAJob
+        displayName: 'CDK Deploy (qa)'
+        environment: 'qa'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+
+                - task: NodeTool@0
+                  inputs:
+                    versionSpec: '$(NODE_VERSION)'
+
+                - script: npm ci
+                  displayName: 'Install dependencies'
+
+                - task: AWSShellScript@1
+                  displayName: 'CDK Deploy'
+                  inputs:
+                    awsCredentials: 'aws-qa-service-connection'
+                    regionName: '$(CDK_DEFAULT_REGION)'
+                    scriptType: inline
+                    inlineScript: |
+                      npx cdk deploy --all --context env=qa --require-approval never
+
+  # ─── Stage 5: Deploy Production (manual approval via Azure DevOps environment) ─
+  - stage: DeployPrd
+    displayName: 'Deploy to Production'
+    dependsOn: DeployQA
+    condition: succeeded()
+    variables:
+      - group: aws-credentials-prd
+    jobs:
+      - deployment: DeployPrdJob
+        displayName: 'CDK Deploy (prd)'
+        environment: 'prd'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+
+                - task: NodeTool@0
+                  inputs:
+                    versionSpec: '$(NODE_VERSION)'
+
+                - script: npm ci
+                  displayName: 'Install dependencies'
+
+                - task: AWSShellScript@1
+                  displayName: 'CDK Deploy'
+                  inputs:
+                    awsCredentials: 'aws-prd-service-connection'
+                    regionName: '$(CDK_DEFAULT_REGION)'
+                    scriptType: inline
+                    inlineScript: |
+                      npx cdk deploy --all --context env=prd --require-approval never

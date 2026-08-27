@@ -1,0 +1,18 @@
+{
+  "name": "daily-health-report",
+  "description": "Scheduled custom SRE agent that runs daily at 08:00 UTC to produce an operational health summary across all production accounts.",
+  "metadata": {
+    "name": "daily-health-report",
+    "tools": [
+      "cloudwatch:DescribeAlarms",
+      "cloudwatch:GetMetricData",
+      "ecs:DescribeServices",
+      "ecs:ListServices",
+      "lambda:ListFunctions",
+      "lambda:GetFunctionConfiguration"
+    ],
+    "skills": [
+      "daily-health-report"
+    ]
+  }
+}

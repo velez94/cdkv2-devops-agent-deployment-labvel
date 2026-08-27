@@ -1,0 +1,91 @@
+[project_properties]
+project_name = "cdkv2-devops-agent-deployment-labvel"
+deployment_region = "us-east-1"
+owner = "platform-team"
+environment = "dev"
+dev_account_id = "571340586587"
+qa_account_id = "904985504252"
+prd_account_id = "039957032026"
+pipeline_mode = "cdk-pipelines"
+pipeline_account = "105171185823"
+vcs_provider = "github"
+codestar_connection_arn = "arn:aws:codestar-connections:us-east-2:105171185823:connection/598aa2a8-f342-4878-ae3e-f8c31732e15e"
+repo_owner = "velez94"
+repo_name = "cdkv2-devops-agent-deployment-labvel"
+
+[thothcf]
+project_id = "cdkv2-devops-agent-deployment"
+project_type = "terraform"
+space = "bco"
+
+[origin_metadata]
+repo_name = "cdkv2-devops-agent-blueprint"
+repo_url = "https://github.com/thothforge/cdkv2-devops-agent-blueprint.git"
+template_url = "https://github.com/thothforge/cdkv2-devops-agent-blueprint.git"
+commit = "37336794474b286b2c77ea25574db80e73dc17f3"
+tag = ""
+
+[template_input_parameters.project_name]
+template_value = "MyProject"
+condition = "^[a-zA-Z0-9\\-]+$"
+description = "Project Name"
+
+[template_input_parameters.deployment_region]
+template_value = "us-east-1"
+condition = "^[a-z]{2}-[a-z]{4,10}-\\d$"
+description = "AWS Region"
+
+[template_input_parameters.owner]
+template_value = "platform-team"
+condition = "^[a-zA-Z0-9\\-]+$"
+description = "Team or role owner"
+
+[template_input_parameters.environment]
+template_value = "dev"
+condition = "(dev|qa|stg|prd)"
+description = "Target environment"
+
+[template_input_parameters.dev_account_id]
+template_value = "111111111111"
+condition = "^\\d{12}$"
+description = "AWS Account ID for dev environment"
+
+[template_input_parameters.qa_account_id]
+template_value = "222222222222"
+condition = "^\\d{12}$"
+description = "AWS Account ID for QA environment"
+
+[template_input_parameters.prd_account_id]
+template_value = "333333333333"
+condition = "^\\d{12}$"
+description = "AWS Account ID for production environment"
+
+[template_input_parameters.pipeline_mode]
+template_value = "github-actions"
+condition = "(cdk-pipelines|github-actions|azure-devops|none)"
+description = "CI/CD pipeline mode: cdk-pipelines (self-mutating CodePipeline), github-actions, azure-devops, or none"
+
+[template_input_parameters.pipeline_account]
+template_value = "111111111111"
+condition = "^\\d{12}$"
+description = "AWS account ID where CDK Pipeline stack is deployed (used only with cdk-pipelines mode)"
+
+[template_input_parameters.vcs_provider]
+template_value = "github"
+condition = "(github|github-enterprise|bitbucket|gitlab)"
+description = "VCS provider for CodeConnections (used only with cdk-pipelines mode)"
+
+[template_input_parameters.codestar_connection_arn]
+template_value = ""
+condition = "^(arn:aws:codeconnections:[a-z0-9-]+:\\d{12}:connection/[a-f0-9-]+|arn:aws:codestar-connections:[a-z0-9-]+:\\d{12}:connection/[a-f0-9-]+|)$"
+description = "AWS CodeConnections ARN (required for cdk-pipelines mode, create via Console)"
+
+[template_input_parameters.repo_owner]
+template_value = "my-org"
+condition = "^[a-zA-Z0-9\\-_.]+$"
+description = "Repository owner/organization"
+
+[template_input_parameters.repo_name]
+template_value = "my-infra"
+condition = "^[a-zA-Z0-9\\-_.]+$"
+description = "Repository name"

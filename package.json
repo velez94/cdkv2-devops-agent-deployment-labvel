@@ -1,0 +1,39 @@
+{
+  "name": "cdkv2_blueprint_project",
+  "version": "0.1.0",
+  "bin": {
+    "cdkv2_blueprint_project": "bin/cdkv2_blueprint_project.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "test": "jest",
+    "cdk": "cdk",
+    "lint": "eslint . --ext .ts",
+    "lint:fix": "eslint . --ext .ts --fix",
+    "format": "prettier --write \"**/*.ts\"",
+    "format:check": "prettier --check \"**/*.ts\""
+  },
+  "devDependencies": {
+    "@types/jest": "^30",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22",
+    "@typescript-eslint/eslint-plugin": "^8",
+    "@typescript-eslint/parser": "^8",
+    "aws-cdk": "2.1133.0",
+    "eslint": "^9",
+    "eslint-config-prettier": "^10",
+    "jest": "^30",
+    "prettier": "^3",
+    "ts-jest": "^29",
+    "ts-node": "^10.9.2",
+    "typescript": "~5.9.3"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.262.0",
+    "cdk-nag": "^3.0.1",
+    "constructs": "^10.7.0",
+    "js-yaml": "^4.1.1",
+    "source-map-support": "^0.5.21"
+  }
+}

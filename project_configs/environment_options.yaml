@@ -1,0 +1,91 @@
+project_name: "cdkv2-devops-agent-deployment-labvel"
+
+# Pipeline configuration
+# mode: cdk-pipelines | github-actions | azure-devops | none
+pipeline:
+  mode: "cdk-pipelines"
+  # CDK Pipelines settings (required when mode = cdk-pipelines)
+  cdk_pipelines:
+    # AWS CodeConnections (formerly CodeStar Connections) ARN
+    # Create via Console: Developer Tools > Settings > Connections > Create connection
+    # Must be in AVAILABLE status (requires manual one-time OAuth handshake with VCS provider)
+    connection_arn: "arn:aws:codestar-connections:us-east-2:105171185823:connection/598aa2a8-f342-4878-ae3e-f8c31732e15e"
+    # VCS provider: github | github-enterprise | bitbucket | gitlab
+    provider: "github"
+    repo: "velez94/cdkv2-devops-agent-deployment-labvel"
+    branch: "main"
+    self_mutating: true
+  # Account/region where the pipeline itself is deployed (tooling account)
+  pipeline_account: "105171185823"
+  pipeline_region: "us-east-1"
+  # Deployment wave ordering
+  deploy_order:
+    - environment: dev
+      manual_approval: false
+    - environment: qa
+      manual_approval: true
+    - environment: prd
+      manual_approval: true
+
+environments:
+  dev:
+    account: "571340586587"
+    region: "us-east-1"
+  qa:
+    account: "904985504252"
+    region: "us-east-1"
+  prd:
+    account: "039957032026"
+    region: "us-east-1"
+
+tags:
+  Project: "cdkv2-devops-agent-deployment-labvel"
+  ManagedBy: "CDK"
+  Owner: "platform-team"
+
+# Custom tag policy for Agent Space resources (optional)
+# If provided, these override the default tags (Environment + ManagedBy)
+# Use this when your organization has its own tagging standard
+# agent_tags:
+#   CostCenter: "CC-12345"
+#   BusinessUnit: "engineering"
+#   Compliance: "pci-dss"
+#   DataClassification: "internal"
+#   ApplicationId: "APP-0042"
+#   Environment: "prod"
+
+# AWS DevOps Agent configuration
+devops_agent:
+  space_name: "cdkv2-devops-agent-deployment-labvel"
+  space_description: "DevOps Agent Space for production operations and release management"
+  # AWS accounts the agent can investigate (multi-account)
+  monitored_accounts:
+    - account_id: "571340586587"
+      role_arn: "arn:aws:iam::571340586587:role/DevOpsAgentAccessRole"
+      regions:
+        - "us-east-1"
+  # MCP server integrations (non-OAuth)
+  # mcp_servers:
+  #   - service_type: "mcpserver"
+  #     name: "custom-runbooks-mcp"
+  #     target_url: "https://mcp.internal.example.com"
+  #     private_connection_name: "internal-mcp"
+  #   - service_type: "mcpserversplunk"
+  #     name: "splunk-integration"
+  #     target_url: "https://splunk.internal.example.com:8089"
+  #   - service_type: "mcpservergrafana"
+  #     name: "grafana-integration"
+  #     target_url: "https://grafana.internal.example.com"
+  # Private connection (uncomment to enable VPC connectivity for MCP servers)
+  # private_connection:
+  #   name: "internalmcp"
+  #   host_address: "10.0.1.50"
+  #   vpc_id: "vpc-0123456789abcdef0"
+  #   subnet_ids:
+  #     - "subnet-0123456789abcdef0"
+  #     - "subnet-0123456789abcdef1"
+  #   security_group_ids:
+  #     - "sg-0123456789abcdef0"
+  # Identity Center (uncomment to use IdC instead of IAM for operator web app)
+  # use_identity_center: true
+  # identity_center_instance_arn: "arn:aws:sso:::instance/ssoins-1234567890abcdef"

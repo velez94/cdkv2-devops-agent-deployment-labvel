@@ -1,0 +1,38 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  annotations:
+    backstage.io/techdocs-ref: dir:.
+    github.com/project-slug: cdkv2-devops-agent-deployment
+    project_properties:
+      codestar_connection_arn: arn:aws:codestar-connections:us-east-2:105171185823:connection/598aa2a8-f342-4878-ae3e-f8c31732e15e
+      deployment_region: us-east-1
+      dev_account_id: '571340586587'
+      environment: dev
+      owner: platform-team
+      pipeline_account: '105171185823'
+      pipeline_mode: cdk-pipelines
+      prd_account_id: 039957032026
+      project_name: cdkv2-devops-agent-deployment-labvel
+      qa_account_id: '904985504252'
+      repo_name: cdkv2-devops-agent-deployment-labvel
+      repo_owner: velez94
+      vcs_provider: github
+  description: IaC project for cdkv2-devops-agent-deployment
+  name: cdkv2-devops-agent-deployment
+  tags:
+  - devops
+  - devsecops
+  - iac
+  - terraform
+  - terragrunt
+  - module
+  - aws
+  - cloud
+  - automation
+  - template
+spec:
+  lifecycle: production
+  owner: IaCPlatform
+  system: IaCPlatform
+  type: template

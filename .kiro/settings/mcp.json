@@ -1,0 +1,80 @@
+{
+  "mcpServers": {
+    "awslabs.aws-iac-mcp-server": {
+      "command": "uvx",
+      "args": ["awslabs.aws-iac-mcp-server@latest"],
+      "env": { "FASTMCP_LOG_LEVEL": "ERROR" },
+      "disabled": false,
+      "autoApprove": []
+    },
+    "aws-knowledge-mcp": {
+      "url": "https://knowledge-mcp.global.api.aws",
+      "disabled": false,
+      "autoApprove": []
+    },
+    "devops-agent": {
+      "url": "${DEVOPS_AGENT_MCP_ENDPOINT}",
+      "headers": {
+        "Authorization": "Bearer ${DEVOPS_AGENT_TOKEN}"
+      },
+      "disabled": true,
+      "autoApprove": [],
+      "_comment": "Enable once Agent Space is deployed and MCP endpoint is available. Set DEVOPS_AGENT_MCP_ENDPOINT and DEVOPS_AGENT_TOKEN in .env"
+    },
+    "thothctl": {
+      "command": "thothctl",
+      "args": ["mcp", "server", "--stdio"],
+      "disabled": false,
+      "autoApprove": []
+    },
+    "git": {
+      "command": "uvx",
+      "args": ["mcp-server-git"],
+      "timeout": 30000,
+      "disabled": false,
+      "autoApprove": []
+    },
+    "awslabs.aws-serverless-mcp-server": {
+      "command": "uvx",
+      "args": ["awslabs.aws-serverless-mcp-server@latest", "--allow-write"],
+      "env": { "FASTMCP_LOG_LEVEL": "ERROR" },
+      "disabled": true,
+      "autoApprove": []
+    },
+    "awslabs.iam-mcp-server": {
+      "command": "uvx",
+      "args": ["awslabs.iam-mcp-server@latest"],
+      "env": { "FASTMCP_LOG_LEVEL": "ERROR" },
+      "disabled": true,
+      "autoApprove": []
+    },
+    "awslabs.cloudwatch-mcp-server": {
+      "command": "uvx",
+      "args": ["awslabs.cloudwatch-mcp-server@latest"],
+      "env": { "FASTMCP_LOG_LEVEL": "ERROR" },
+      "disabled": true,
+      "autoApprove": []
+    },
+    "awslabs.eks-mcp-server": {
+      "command": "uvx",
+      "args": ["awslabs.eks-mcp-server@latest", "--allow-write"],
+      "env": { "FASTMCP_LOG_LEVEL": "ERROR" },
+      "disabled": true,
+      "autoApprove": []
+    },
+    "awslabs.ecs-mcp-server": {
+      "command": "uvx",
+      "args": ["--from", "awslabs-ecs-mcp-server", "ecs-mcp-server"],
+      "env": { "FASTMCP_LOG_LEVEL": "ERROR" },
+      "disabled": true,
+      "autoApprove": []
+    },
+    "awslabs.dynamodb-mcp-server": {
+      "command": "uvx",
+      "args": ["awslabs.dynamodb-mcp-server@latest"],
+      "env": { "FASTMCP_LOG_LEVEL": "ERROR" },
+      "disabled": true,
+      "autoApprove": []
+    }
+  }
+}

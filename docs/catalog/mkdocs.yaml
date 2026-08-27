@@ -1,0 +1,6 @@
+site_name: CDKv2 Scaffold Project
+nav:
+  - Home: index.md
+  - Changelog: changelog.md
+plugins:
+  - techdocs-core
