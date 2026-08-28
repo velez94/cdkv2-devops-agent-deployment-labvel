@@ -39,13 +39,13 @@ describe('DevOpsAgent Stack', () => {
     });
   });
 
-  test('Creates AWS account association', () => {
+  test('Creates cross-account association (SourceAws/source)', () => {
     template.hasResourceProperties('AWS::DevOpsAgent::Association', {
       ServiceId: 'aws',
       Configuration: Match.objectLike({
-        Aws: Match.objectLike({
+        SourceAws: Match.objectLike({
           AccountId: '111111111111',
-          AccountType: 'monitor',
+          AccountType: 'source',
           AssumableRoleArn: 'arn:aws:iam::111111111111:role/DevOpsAgentAccessRole',
         }),
       }),

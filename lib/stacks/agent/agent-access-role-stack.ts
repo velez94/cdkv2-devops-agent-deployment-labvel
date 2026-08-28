@@ -37,6 +37,12 @@ export class AgentAccessRoleStack extends cdk.Stack {
     super(scope, id, props);
 
     const account = cdk.Stack.of(this).account;
+    const region = cdk.Stack.of(this).region;
+
+    // Agent Space ARN pattern this role trusts. Using a wildcard on the
+    // agentspace segment avoids a hard dependency on the Agent Space being
+    // created first (the ARN is not known at role-creation time).
+    const agentSpaceArnPattern = `arn:aws:aidevops:${region}:${props.agentSpaceAccountId}:agentspace/*`;
 
     // IAM Role: assumed by DevOps Agent service from the hub account
     this.agentAccessRole = new iam.Role(this, 'AgentAccessRole', {
@@ -45,6 +51,9 @@ export class AgentAccessRoleStack extends cdk.Stack {
         conditions: {
           StringEquals: {
             'aws:SourceAccount': props.agentSpaceAccountId,
+          },
+          ArnLike: {
+            'aws:SourceArn': agentSpaceArnPattern,
           },
         },
       }),

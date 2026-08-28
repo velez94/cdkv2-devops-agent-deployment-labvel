@@ -13,13 +13,19 @@ export interface DevOpsAgentAwsAssociationProps {
 }
 
 /**
- * L2-like construct wrapping AWS::DevOpsAgent::Association for AWS accounts.
+ * L2-like construct wrapping AWS::DevOpsAgent::Association for a REMOTE (cross-account) account.
  *
- * Associates an AWS account with an Agent Space, enabling DevOps Agent
- * to access CloudWatch, CloudTrail, X-Ray, and other observability data
- * from the target account.
+ * For accounts OTHER than the one where the Agent Space lives, DevOps Agent
+ * uses the "SourceAws" configuration with accountType "source".
  *
- * Uses association type "Aws" with accountType "monitor".
+ * The IAM role referenced by assumableRoleArn MUST already exist in the target
+ * account and trust the Agent Space ARN (via aws:SourceArn condition). If the
+ * role is missing or its trust policy does not reference the Agent Space, the
+ * service returns "Cross-account pass role is not allowed."
+ *
+ * Ref: https://docs.aws.amazon.com/devopsagent/latest/userguide/
+ * getting-started-with-aws-devops-agent-getting-started-with-aws-devops-agent-using-aws-cloudformation.html
+ * (Part 2: cross-account monitoring uses SourceAws/source)
  */
 export class DevOpsAgentAwsAssociation extends Construct {
   public readonly associationId: string;
@@ -31,9 +37,9 @@ export class DevOpsAgentAwsAssociation extends Construct {
       agentSpaceId: props.agentSpaceId,
       serviceId: 'aws',
       configuration: {
-        aws: {
+        sourceAws: {
           accountId: props.accountId,
-          accountType: 'monitor',
+          accountType: 'source',
           assumableRoleArn: props.roleArn,
         },
       },
@@ -53,16 +59,15 @@ export interface DevOpsAgentSourceAwsAssociationProps {
 }
 
 /**
- * L2-like construct wrapping AWS::DevOpsAgent::Association for the SOURCE account.
+ * L2-like construct wrapping AWS::DevOpsAgent::Association for the HOSTING account.
  *
- * The SourceAws association represents the hosting account itself — the account
- * where the Agent Space is deployed. This is created alongside the Agent Space
- * and enables the agent to monitor the hosting account's own resources.
- *
- * This is different from the "Aws" (monitor) association which is for remote accounts.
+ * The hosting account (where the Agent Space is deployed) uses the "Aws"
+ * configuration with accountType "monitor". This enables the agent to monitor
+ * the hosting account's own resources.
  *
  * Ref: https://docs.aws.amazon.com/devopsagent/latest/userguide/
- * getting-started-with-aws-devops-agent-getting-started-with-aws-devops-agent-using-aws-cdk.html
+ * getting-started-with-aws-devops-agent-getting-started-with-aws-devops-agent-using-aws-cloudformation.html
+ * (Part 1: the hosting account uses Aws/monitor)
  */
 export class DevOpsAgentSourceAwsAssociation extends Construct {
   public readonly associationId: string;
@@ -74,9 +79,9 @@ export class DevOpsAgentSourceAwsAssociation extends Construct {
       agentSpaceId: props.agentSpaceId,
       serviceId: 'aws',
       configuration: {
-        sourceAws: {
+        aws: {
           accountId: props.accountId,
-          accountType: 'source',
+          accountType: 'monitor',
           assumableRoleArn: props.roleArn,
         },
       },
