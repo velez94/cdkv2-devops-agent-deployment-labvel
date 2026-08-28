@@ -10,37 +10,50 @@ import {
   CdkPipelinesConfig,
   DeployStage as DeployStageConfig,
   EnvironmentConfig,
-  DevOpsAgentYamlConfig,
+  AgentSpaceYamlConfig,
+  McpServerYamlConfig,
+  PrivateConnectionYamlConfig,
 } from '../../../project_configs/config-loader';
 import { DeployStage } from './deploy-stage';
-import { DevOpsAgentConfig } from '../agent/devops-agent-stack';
+import { DevOpsAgentStack, DevOpsAgentConfig, MonitoredAccountConfig } from '../agent/devops-agent-stack';
 
 export interface PipelineStackProps extends cdk.StackProps {
   projectName: string;
   pipelineConfig: CdkPipelinesConfig;
   deployOrder: DeployStageConfig[];
   environments: Record<string, EnvironmentConfig>;
-  /** DevOps Agent YAML config — passed to each stage */
-  devopsAgentConfig?: DevOpsAgentYamlConfig;
+  /** Hub model: Agent Spaces deployed in this (pipeline) account */
+  agentSpaces?: AgentSpaceYamlConfig[];
+  /** Shared MCP server config */
+  mcpServers?: McpServerYamlConfig[];
+  /** Shared private connection config */
+  privateConnection?: PrivateConnectionYamlConfig;
+  /** Identity Center settings */
+  useIdentityCenter?: boolean;
+  identityCenterInstanceArn?: string;
 }
 
 /**
  * Self-mutating CDK Pipeline using AWS CodePipeline.
  *
+ * Architecture (Hub Model):
+ * ┌─────────────────────────────────────────────────────────────────┐
+ * │ Pipeline Account (devsecops)                                    │
+ * │  ├── CodePipeline (self-mutating)                               │
+ * │  ├── Agent Space "NonProd" → monitors dev + qa accounts         │
+ * │  └── Agent Space "Prod"   → monitors prd account               │
+ * └─────────────────────────────────────────────────────────────────┘
+ *         │ deploys cross-account
+ *         ▼
+ * ┌─────────────────────────────────────────────────────────────────┐
+ * │ Target Accounts (dev, qa, prd)                                  │
+ * │  └── AgentAccessRoleStack (IAM role only)                       │
+ * └─────────────────────────────────────────────────────────────────┘
+ *
  * Prerequisites:
  * 1. AWS CodeConnections connection in AVAILABLE status
- *    (Console → Developer Tools → Settings → Connections → Create connection)
- *    The connection requires a one-time OAuth handshake with your VCS provider.
- *
- * 2. CDK bootstrap in all target accounts with trust to the pipeline account:
- *    cdk bootstrap aws://TARGET_ACCOUNT/REGION \
- *      --trust PIPELINE_ACCOUNT \
- *      --cloudformation-execution-policies arn:aws:iam::aws:policy/AdministratorAccess
- *
- * 3. First deploy is manual:
- *    cdk deploy *-Pipeline --context env=dev
- *
- * After that, the pipeline self-mutates and deploys all stages on every git push.
+ * 2. CDK bootstrap in all target accounts with --trust to pipeline account
+ * 3. First deploy: cdk deploy *-Pipeline --profile <devsecops-profile>
  */
 export class PipelineStack extends cdk.Stack {
   public readonly pipeline: CodePipeline;
@@ -48,13 +61,14 @@ export class PipelineStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: PipelineStackProps) {
     super(scope, id, props);
 
+    const pipelineAccountId = this.account;
+
     // Source: VCS connection (GitHub, Bitbucket, GitLab via AWS CodeConnections)
     const source = CodePipelineSource.connection(
       props.pipelineConfig.repo,
       props.pipelineConfig.branch,
       {
         connectionArn: props.pipelineConfig.connection_arn,
-        // triggerOnPush defaults to true — pipeline runs on every push to branch
       },
     );
 
@@ -74,10 +88,10 @@ export class PipelineStack extends cdk.Stack {
       crossAccountKeys: true,
     });
 
-    // Build agent config for stages (if devops_agent section exists)
-    const agentConfig = this.buildAgentConfig(props.devopsAgentConfig);
+    // ─── Deploy Stages: AgentAccessRole to target accounts ──────────────
+    // Build a map of environment → agent space name for role naming
+    const envToSpaceMap = this.buildEnvToSpaceMap(props.agentSpaces);
 
-    // Add deployment stages in order
     for (const stageConfig of props.deployOrder) {
       const envConfig = props.environments[stageConfig.environment];
 
@@ -88,11 +102,20 @@ export class PipelineStack extends cdk.Stack {
         );
       }
 
+      const spaceName = envToSpaceMap.get(stageConfig.environment);
+      if (!spaceName) {
+        throw new Error(
+          `deploy_order references environment "${stageConfig.environment}" ` +
+            `but no agent_space monitors it.`,
+        );
+      }
+
       const stage = new DeployStage(this, `Deploy-${stageConfig.environment}`, {
         env: { account: envConfig.account, region: envConfig.region },
         projectName: props.projectName,
         environment: stageConfig.environment,
-        agentConfig,
+        agentSpaceAccountId: pipelineAccountId,
+        agentSpaceName: spaceName,
       });
 
       // Add stage with optional manual approval gate
@@ -108,39 +131,88 @@ export class PipelineStack extends cdk.Stack {
         this.pipeline.addStage(stage);
       }
     }
+
+    // ─── Agent Spaces: deployed directly in pipeline account ────────────
+    if (props.agentSpaces) {
+      for (const spaceConfig of props.agentSpaces) {
+        const agentConfig = this.buildAgentConfig(
+          spaceConfig,
+          props.environments,
+          pipelineAccountId,
+          props.mcpServers,
+          props.privateConnection,
+          props.useIdentityCenter,
+          props.identityCenterInstanceArn,
+        );
+
+        new DevOpsAgentStack(this, `AgentSpace-${spaceConfig.tier}`, {
+          projectName: props.projectName,
+          environment: spaceConfig.tier,
+          agentConfig,
+        });
+      }
+    }
   }
 
   /**
-   * Convert YAML-shaped config to the DevOpsAgentConfig interface expected by the stack.
+   * Build a map from environment name to the Agent Space name that monitors it.
    */
-  private buildAgentConfig(yamlConfig?: DevOpsAgentYamlConfig): DevOpsAgentConfig | undefined {
-    if (!yamlConfig) return undefined;
+  private buildEnvToSpaceMap(
+    agentSpaces?: AgentSpaceYamlConfig[],
+  ): Map<string, string> {
+    const map = new Map<string, string>();
+    if (!agentSpaces) return map;
+
+    for (const space of agentSpaces) {
+      for (const ma of space.monitored_accounts) {
+        map.set(ma.environment, space.name);
+      }
+    }
+    return map;
+  }
+
+  /**
+   * Convert YAML-shaped AgentSpaceConfig to the DevOpsAgentConfig interface.
+   */
+  private buildAgentConfig(
+    spaceConfig: AgentSpaceYamlConfig,
+    environments: Record<string, EnvironmentConfig>,
+    hubAccountId: string,
+    mcpServers?: McpServerYamlConfig[],
+    privateConnection?: PrivateConnectionYamlConfig,
+    useIdentityCenter?: boolean,
+    identityCenterInstanceArn?: string,
+  ): DevOpsAgentConfig {
+    // Build monitored accounts with role ARN derived from the AgentAccessRoleStack
+    const monitoredAccounts: MonitoredAccountConfig[] = spaceConfig.monitored_accounts.map(
+      (ma) => ({
+        accountId: ma.account_id,
+        roleArn: `arn:aws:iam::${ma.account_id}:role/DevOpsAgentAccessRole-${spaceConfig.name}`,
+        regions: ma.regions,
+      }),
+    );
 
     return {
-      spaceName: yamlConfig.space_name,
-      spaceDescription: yamlConfig.space_description,
-      monitoredAccounts: yamlConfig.monitored_accounts?.map((a) => ({
-        accountId: a.account_id,
-        roleArn: a.role_arn,
-        regions: a.regions,
-      })),
-      mcpServers: yamlConfig.mcp_servers?.map((m) => ({
+      spaceName: spaceConfig.name,
+      spaceDescription: spaceConfig.description,
+      monitoredAccounts,
+      mcpServers: mcpServers?.map((m) => ({
         serviceType: m.service_type,
         name: m.name,
         targetUrl: m.target_url,
         privateConnectionName: m.private_connection_name,
       })),
-      privateConnection: yamlConfig.private_connection
+      privateConnection: privateConnection
         ? {
-            name: yamlConfig.private_connection.name,
-            hostAddress: yamlConfig.private_connection.host_address,
-            vpcId: yamlConfig.private_connection.vpc_id,
-            subnetIds: yamlConfig.private_connection.subnet_ids,
-            securityGroupIds: yamlConfig.private_connection.security_group_ids,
+            name: privateConnection.name,
+            hostAddress: privateConnection.host_address,
+            vpcId: privateConnection.vpc_id,
+            subnetIds: privateConnection.subnet_ids,
+            securityGroupIds: privateConnection.security_group_ids,
           }
         : undefined,
-      useIdentityCenter: yamlConfig.use_identity_center,
-      identityCenterInstanceArn: yamlConfig.identity_center_instance_arn,
+      useIdentityCenter,
+      identityCenterInstanceArn,
     };
   }
 }

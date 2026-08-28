@@ -15,10 +15,11 @@ pipeline:
     repo: "velez94/cdkv2-devops-agent-deployment-labvel"
     branch: "main"
     self_mutating: true
-  # Account/region where the pipeline itself is deployed (tooling account)
+  # Account/region where the pipeline itself is deployed (tooling/devsecops account)
+  # This is also where Agent Spaces are deployed (hub model)
   pipeline_account: "105171185823"
   pipeline_region: "us-east-1"
-  # Deployment wave ordering
+  # Deployment wave ordering (deploys AgentAccessRole to target accounts)
   deploy_order:
     - environment: dev
       manual_approval: false
@@ -43,49 +44,66 @@ tags:
   ManagedBy: "CDK"
   Owner: "platform-team"
 
-# Custom tag policy for Agent Space resources (optional)
-# If provided, these override the default tags (Environment + ManagedBy)
-# Use this when your organization has its own tagging standard
-# agent_tags:
-#   CostCenter: "CC-12345"
-#   BusinessUnit: "engineering"
-#   Compliance: "pci-dss"
-#   DataClassification: "internal"
-#   ApplicationId: "APP-0042"
-#   Environment: "prod"
+# ──────────────────────────────────────────────────────────────────────────────
+# AWS DevOps Agent Configuration — Hub Model
+# ──────────────────────────────────────────────────────────────────────────────
+# Agent Spaces are deployed in the pipeline/devsecops account (hub).
+# Target accounts only receive a lightweight IAM role for cross-account access.
+#
+# Architecture:
+#   Pipeline Account (devsecops):
+#     ├── Agent Space "NonProd" → monitors dev + qa
+#     └── Agent Space "Prod"    → monitors prd
+#
+#   Target Accounts:
+#     └── AgentAccessRole (IAM role assumed by the Agent Space)
+#
+# This follows AWS best practice: "one Agent Space per on-call team"
+# separating production from non-production environments.
+# ──────────────────────────────────────────────────────────────────────────────
 
-# AWS DevOps Agent configuration
-devops_agent:
-  space_name: "cdkv2-devops-agent-deployment-labvel"
-  space_description: "DevOps Agent Space for production operations and release management"
-  # AWS accounts the agent can investigate (multi-account)
-  monitored_accounts:
-    - account_id: "571340586587"
-      role_arn: "arn:aws:iam::571340586587:role/DevOpsAgentAccessRole"
-      regions:
-        - "us-east-1"
-  # MCP server integrations (non-OAuth)
-  # mcp_servers:
-  #   - service_type: "mcpserver"
-  #     name: "custom-runbooks-mcp"
-  #     target_url: "https://mcp.internal.example.com"
-  #     private_connection_name: "internal-mcp"
-  #   - service_type: "mcpserversplunk"
-  #     name: "splunk-integration"
-  #     target_url: "https://splunk.internal.example.com:8089"
-  #   - service_type: "mcpservergrafana"
-  #     name: "grafana-integration"
-  #     target_url: "https://grafana.internal.example.com"
-  # Private connection (uncomment to enable VPC connectivity for MCP servers)
-  # private_connection:
-  #   name: "internalmcp"
-  #   host_address: "10.0.1.50"
-  #   vpc_id: "vpc-0123456789abcdef0"
-  #   subnet_ids:
-  #     - "subnet-0123456789abcdef0"
-  #     - "subnet-0123456789abcdef1"
-  #   security_group_ids:
-  #     - "sg-0123456789abcdef0"
-  # Identity Center (uncomment to use IdC instead of IAM for operator web app)
-  # use_identity_center: true
-  # identity_center_instance_arn: "arn:aws:sso:::instance/ssoins-1234567890abcdef"
+agent_spaces:
+  - name: "devops-agent-nonprod"
+    description: "DevOps Agent Space for non-production environments (dev + qa)"
+    tier: "nonprod"
+    # Accounts this Agent Space monitors (cross-account associations)
+    monitored_accounts:
+      - environment: dev
+        account_id: "571340586587"
+        regions:
+          - "us-east-1"
+      - environment: qa
+        account_id: "904985504252"
+        regions:
+          - "us-east-1"
+
+  - name: "devops-agent-prod"
+    description: "DevOps Agent Space for production environment"
+    tier: "prod"
+    monitored_accounts:
+      - environment: prd
+        account_id: "039957032026"
+        regions:
+          - "us-east-1"
+
+# MCP server integrations (applied to all spaces, or per-space if needed)
+# mcp_servers:
+#   - service_type: "mcpserver"
+#     name: "custom-runbooks-mcp"
+#     target_url: "https://mcp.internal.example.com"
+#     private_connection_name: "internal-mcp"
+
+# Private connection (uncomment to enable VPC connectivity for MCP servers)
+# private_connection:
+#   name: "internalmcp"
+#   host_address: "10.0.1.50"
+#   vpc_id: "vpc-0123456789abcdef0"
+#   subnet_ids:
+#     - "subnet-0123456789abcdef0"
+#     - "subnet-0123456789abcdef1"
+#   security_group_ids:
+#     - "sg-0123456789abcdef0"
+
+# Identity Center (uncomment to use IdC instead of IAM for operator web app)
+# use_identity_center: true
+# identity_center_instance_arn: "arn:aws:sso:::instance/ssoins-1234567890abcdef"
