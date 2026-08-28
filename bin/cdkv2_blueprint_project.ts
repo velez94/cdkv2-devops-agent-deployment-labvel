@@ -125,6 +125,7 @@ function buildAgentConfigFromSpace(
   return {
     spaceName: spaceConfig.name,
     spaceDescription: spaceConfig.description,
+    locale: spaceConfig.locale,
     monitoredAccounts,
     mcpServers: config.mcp_servers?.map((m) => ({
       serviceType: m.service_type,

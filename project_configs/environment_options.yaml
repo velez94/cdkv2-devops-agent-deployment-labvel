@@ -66,6 +66,10 @@ agent_spaces:
   - name: "devops-agent-nonprod"
     description: "DevOps Agent Space for non-production environments (dev + qa)"
     tier: "nonprod"
+    # Language of agent responses (BCP-47). Optional — omit for English default.
+    # Examples: "en", "es", "es-ES", "pt-BR", "ja". Can be changed later without
+    # replacing the Agent Space.
+    # locale: "es"
     # Accounts this Agent Space monitors (cross-account associations)
     monitored_accounts:
       - environment: dev

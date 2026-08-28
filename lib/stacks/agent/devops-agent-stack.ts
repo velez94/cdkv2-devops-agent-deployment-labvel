@@ -21,6 +21,8 @@ export interface DevOpsAgentConfig {
   spaceName: string;
   /** Description of the Agent Space */
   spaceDescription?: string;
+  /** Locale (BCP-47) determining the language of agent responses (e.g. "es", "pt-BR") */
+  locale?: string;
   /** AWS accounts to associate (multi-account monitoring) */
   monitoredAccounts?: MonitoredAccountConfig[];
   /**
@@ -95,6 +97,7 @@ export class DevOpsAgentStack extends cdk.Stack {
     this.agentSpace = new DevOpsAgentSpace(this, 'AgentSpace', {
       spaceName: agentConfig.spaceName,
       description: agentConfig.spaceDescription ?? `DevOps Agent Space for ${props.projectName} (${environment})`,
+      locale: agentConfig.locale,
       environment,
       projectName: props.projectName,
       tags: props.agentTags,

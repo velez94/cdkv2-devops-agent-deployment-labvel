@@ -58,6 +58,13 @@ export interface AgentSpaceYamlConfig {
   description?: string;
   /** Tier: nonprod | prod (used for resource naming and retention policies) */
   tier: 'nonprod' | 'prod';
+  /**
+   * Locale (BCP-47) that determines the language used in agent responses.
+   * Examples: "en", "es", "es-ES", "pt-BR", "ja". Optional — defaults to
+   * the service default (English) when omitted. Can be changed later without
+   * replacing the Agent Space (no-interruption update).
+   */
+  locale?: string;
   /** Accounts this space monitors (cross-account associations) */
   monitored_accounts: MonitoredAccountYamlConfig[];
 }
@@ -146,6 +153,13 @@ export function loadConfig(): ProjectConfig {
       if (!space.monitored_accounts || space.monitored_accounts.length === 0) {
         throw new Error(
           `Agent space "${space.name}" must have at least one monitored_account.`,
+        );
+      }
+      // Validate locale format (BCP-47) if provided
+      if (space.locale && !/^[a-zA-Z]{2,3}(-[a-zA-Z0-9]{2,8})*$/.test(space.locale)) {
+        throw new Error(
+          `Agent space "${space.name}" has an invalid locale "${space.locale}". ` +
+            `Use a BCP-47 language tag such as "en", "es", "es-ES", "pt-BR", or "ja".`,
         );
       }
       // Validate that monitored environments exist

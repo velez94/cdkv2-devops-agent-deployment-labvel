@@ -9,6 +9,8 @@ export interface DevOpsAgentSpaceProps {
   spaceName: string;
   /** Description */
   description?: string;
+  /** Locale (BCP-47) determining the language of agent responses (e.g. "es", "pt-BR") */
+  locale?: string;
   /** Environment (dev/qa/prd) */
   environment: string;
   /** Project name for tagging */
@@ -139,6 +141,7 @@ export class DevOpsAgentSpace extends Construct {
       name: props.spaceName,
       description: props.description,
       kmsKeyArn: this.encryptionKey.keyArn,
+      locale: props.locale,
       operatorApp,
       tags: this.buildTags(props),
     });

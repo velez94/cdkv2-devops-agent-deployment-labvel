@@ -13,6 +13,7 @@ describe('DevOpsAgent Stack', () => {
       agentConfig: {
         spaceName: 'test-agent-space',
         spaceDescription: 'Test Agent Space',
+        locale: 'es',
         monitoredAccounts: [
           {
             accountId: '111111111111',
@@ -30,6 +31,12 @@ describe('DevOpsAgent Stack', () => {
       Name: 'test-agent-space',
       Description: 'Test Agent Space',
       KmsKeyArn: Match.anyValue(),
+    });
+  });
+
+  test('Agent Space uses the configured locale', () => {
+    template.hasResourceProperties('AWS::DevOpsAgent::AgentSpace', {
+      Locale: 'es',
     });
   });
 

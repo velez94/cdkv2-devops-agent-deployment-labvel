@@ -197,6 +197,7 @@ export class PipelineStack extends cdk.Stack {
     return {
       spaceName: spaceConfig.name,
       spaceDescription: spaceConfig.description,
+      locale: spaceConfig.locale,
       monitoredAccounts,
       mcpServers: mcpServers?.map((m) => ({
         serviceType: m.service_type,
