@@ -1,158 +1,231 @@
-# devops-agent-blueprint — CDKv2 TypeScript Infrastructure
+# cdkv2-devops-agent-deployment-labvel
 
-> Enterprise-grade AWS CDK blueprint with cdk-nag compliance, multi-environment support, and AI-assisted development via ThothForge.
+> AWS DevOps Agent deployment using CDK v2 — Hub model with multi-account cross-account monitoring.
 
 ## Architecture
 
+This blueprint follows the **AWS best practice** of deploying Agent Spaces in an operations (DevSecOps) account as a hub, with lightweight IAM roles in target workload accounts.
+
 ```
-bin/                          CDK app entry point
+┌─────────────────────────────────────────────────────────────────────────┐
+│ DevSecOps / Pipeline Account (Operations Hub)                           │
+│                                                                         │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │ CDK Pipeline (self-mutating, CodeConnections → GitHub)           │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│  ┌────────────────────────────┐  ┌────────────────────────────────┐   │
+│  │ Agent Space: NonProd       │  │ Agent Space: Prod              │   │
+│  │                            │  │                                │   │
+│  │ • KMS CMK (encryption)     │  │ • KMS CMK (encryption)        │   │
+│  │ • Agent Access Role        │  │ • Agent Access Role            │   │
+│  │ • Operator Role            │  │ • Operator Role                │   │
+│  │ • Monitors: dev + qa       │  │ • Monitors: prd               │   │
+│  └────────────────────────────┘  └────────────────────────────────┘   │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+         │ Cross-account deploy (CDK Pipelines)
+         ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Target Accounts (Workloads)                                             │
+│                                                                         │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────────────┐ │
+│  │  dev account │  │  qa account  │  │  prd account                 │ │
+│  │              │  │              │  │                              │ │
+│  │  IAM Role:   │  │  IAM Role:   │  │  IAM Role:                  │ │
+│  │  DevOpsAgent │  │  DevOpsAgent │  │  DevOpsAgentAccessRole      │ │
+│  │  AccessRole  │  │  AccessRole  │  │  -devops-agent-prod         │ │
+│  │  -devops-    │  │  -devops-    │  │                              │ │
+│  │  agent-      │  │  agent-      │  │  (assumed by aidevops svc)   │ │
+│  │  nonprod     │  │  nonprod     │  │                              │ │
+│  └──────────────┘  └──────────────┘  └──────────────────────────────┘ │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Design Decisions
+
+| Decision | Rationale |
+|----------|-----------|
+| **Hub model** (Agent Spaces in operations account) | Centralized management, single pane of glass per on-call tier |
+| **Two spaces** (NonProd + Prod) | AWS best practice: one Agent Space per on-call team, separate prod from non-prod |
+| **Lightweight target stacks** | Minimizes blast radius — target accounts only get an IAM role |
+| **CDK Pipelines** | Self-mutating, cross-account, infrastructure as code delivery |
+
+## Project Structure
+
+```
+bin/                              CDK app entry point
 lib/
 ├── stacks/
-│   ├── foundation/           Core resources (S3, KMS, IAM baselines)
-│   ├── agent/                AWS DevOps Agent (Agent Space, Associations, MCP)
-│   ├── platform/             Shared infra (VPC, ECS, API Gateway)
-│   └── application/          Workload resources (Lambda, DynamoDB)
-└── constructs/               Reusable L2/L3 constructs
-skills/                       DevOps Agent Skills (SKILL.md format)
-app/functions/                Lambda function source code
-project_configs/              YAML-driven environment configuration
-test/                         CDK assertions + cdk-nag + snapshots
-docs/catalog/                 Backstage TechDocs
+│   ├── agent/
+│   │   ├── devops-agent-stack.ts       Agent Space (hub deployment)
+│   │   └── agent-access-role-stack.ts  Cross-account IAM role (target accounts)
+│   └── pipeline/
+│       ├── pipeline-stack.ts           Self-mutating CodePipeline
+│       └── deploy-stage.ts            CDK Pipelines stage (deploys IAM role)
+├── constructs/
+│   ├── devops-agent-space.ts           L2-like construct: Agent Space + roles
+│   ├── devops-agent-aws-association.ts Cross-account associations
+│   ├── devops-agent-mcp-service.ts     MCP server integrations
+│   └── devops-agent-private-connection.ts VPC connectivity
+project_configs/
+│   ├── environment_options.yaml        All configuration (accounts, spaces)
+│   └── config-loader.ts               YAML → TypeScript config loader
+skills/                               DevOps Agent Skills (SKILL.md format)
+test/                                 CDK assertions + cdk-nag + snapshots
 ```
 
-## Prerequisites (Supplied by Platform Team)
+## Prerequisites
 
-The following resources must exist **before** deploying this blueprint. They are managed by the `cdkv2_sso_delegated_management` pipeline:
+### 1. CDK Bootstrap
 
-| Resource | Pipeline | Purpose |
-|----------|----------|---------|
-| Permission Set: `prt_secops_devopsagent_org` | SSO pipeline | SecOps operator access to Agent Space |
-| Permission Set: `prt_secops_securityagent_org` | SSO pipeline | Security Agent access |
-| Permission Set: `prt_secofficer_agents_adm_org` | SSO pipeline | Agent administration (integrations config) |
-| Permission Set: `prt_devs_devopsagent_ro_b4us` | SSO pipeline | Developer read-only access |
-| `DevOpsAgentAccessRole` in monitored accounts | StackSet | Cross-account agent access |
-| AWS Support plan on hosting account | Manual | Credits for agent compute |
+All accounts must be CDK-bootstrapped. Target accounts need `--trust` to the pipeline account:
 
-This blueprint deploys the **infrastructure** (Agent Space, KMS, associations, MCP). Access **to** the Agent Space is governed by the SSO pipeline.
+```bash
+# Pipeline account (self-bootstrap)
+npx cdk bootstrap aws://PIPELINE_ACCOUNT/us-east-1 \
+  --profile <devsecops-profile>
 
-## Quick Start
+# Target accounts (trust the pipeline account)
+npx cdk bootstrap aws://TARGET_ACCOUNT/us-east-1 \
+  --trust PIPELINE_ACCOUNT \
+  --cloudformation-execution-policies arn:aws:iam::aws:policy/AdministratorAccess \
+  --profile <target-profile>
+```
+
+### 2. CodeConnections
+
+Create an AWS CodeConnections connection in the pipeline account:
+- Console → Developer Tools → Settings → Connections → Create connection
+- Complete the OAuth handshake with your VCS provider (GitHub)
+- Connection must be in `AVAILABLE` status
+
+### 3. First Deployment
+
+```bash
+npx cdk deploy "*-Pipeline" --profile <devsecops-profile>
+```
+
+After this, the pipeline self-mutates on every `git push` to main.
+
+## Configuration
+
+All configuration lives in `project_configs/environment_options.yaml`:
+
+```yaml
+# Accounts and regions
+environments:
+  dev:
+    account: "111111111111"
+    region: "us-east-1"
+  qa:
+    account: "222222222222"
+    region: "us-east-1"
+  prd:
+    account: "333333333333"
+    region: "us-east-1"
+
+# Agent Spaces (deployed in pipeline account)
+agent_spaces:
+  - name: "my-app-nonprod"
+    description: "NonProd Agent Space"
+    tier: "nonprod"
+    monitored_accounts:
+      - environment: dev
+        account_id: "111111111111"
+        regions: ["us-east-1"]
+      - environment: qa
+        account_id: "222222222222"
+        regions: ["us-east-1"]
+
+  - name: "my-app-prod"
+    description: "Prod Agent Space"
+    tier: "prod"
+    monitored_accounts:
+      - environment: prd
+        account_id: "333333333333"
+        regions: ["us-east-1"]
+```
+
+### Optional Integrations
+
+```yaml
+# MCP server integrations (Splunk, Grafana, custom)
+mcp_servers:
+  - service_type: "mcpserver"
+    name: "custom-runbooks"
+    target_url: "https://mcp.internal.example.com"
+    private_connection_name: "internal-mcp"
+
+# VPC connectivity for MCP servers
+private_connection:
+  name: "internalmcp"
+  host_address: "10.0.1.50"
+  vpc_id: "vpc-0123456789abcdef0"
+  subnet_ids: ["subnet-aaa", "subnet-bbb"]
+  security_group_ids: ["sg-111"]
+
+# Identity Center (instead of IAM auth for operator web app)
+use_identity_center: true
+identity_center_instance_arn: "arn:aws:sso:::instance/ssoins-..."
+```
+
+> **Note**: OAuth-based integrations (GitHub, Slack, Datadog, Jira) must be configured via the AWS Console.
+
+## Development
 
 ```bash
 # Install dependencies
 npm install
 
-# Synthesize CloudFormation (dev environment)
-npx cdk synth --context env=dev
+# Build
+npm run build
 
 # Run tests (includes cdk-nag compliance)
 npm test
 
-# Deploy to dev
-npx cdk deploy --all --context env=dev
-```
+# Synthesize
+npx cdk synth
 
-## Environment Configuration
+# Direct deploy mode (without pipeline)
+# Deploy Agent Spaces to hub account:
+npx cdk deploy --all --context target=agent-space --profile <devsecops-profile>
 
-Edit `project_configs/environment_options.yaml` to configure accounts and regions:
-
-```yaml
-environments:
-  dev:
-    account: "111111111111"
-    region: "us-east-1"
-  prd:
-    account: "333333333333"
-    region: "us-east-1"
+# Deploy IAM role to a target account:
+npx cdk deploy --all --context target=access-role --context env=dev --profile <dev-profile>
 ```
 
 ## Security & Compliance
 
-- **cdk-nag**: AwsSolutions checks run on every `cdk synth`
-- **Encryption**: All storage resources encrypted at rest (S3, EBS, RDS)
-- **SSL/TLS**: Enforced on all data-in-transit paths
-- **Public access**: Blocked by default on all S3 buckets
+- **cdk-nag**: AwsSolutions checks run on every synthesis
+- **KMS encryption**: Agent Space data encrypted with dedicated CMK per space
+- **Key rotation**: Enabled by default on all KMS keys
+- **Least privilege**: Agent assumes read-only role (`AIDevOpsAgentAccessPolicy`)
+- **Cross-account trust**: Scoped to `aidevops.amazonaws.com` with `SourceAccount` condition
+- **Separation of concerns**: Prod and NonProd Agent Spaces are fully isolated
 - **Tagging**: Mandatory tags (Project, Environment, Owner, ManagedBy)
-
-## Development
-
-```bash
-# Lint
-npm run lint
-
-# Format
-npm run format
-
-# Watch mode (auto-compile)
-npm run watch
-
-# Run specific test
-npx jest test/cdk-nag.test.ts
-```
 
 ## CI/CD Pipeline
 
-GitHub Actions pipeline (`.github/workflows/deploy.yml`):
-1. **Lint & Test** — ESLint, Prettier, Jest
-2. **Synth** — CDK synth per environment (matrix)
-3. **Security Scan** — Checkov on synthesized CloudFormation
-4. **Deploy** — CDK deploy to dev (on main push, with OIDC role)
+Self-mutating CDK Pipeline (AWS CodePipeline):
 
-## AI-Assisted Development
-
-This blueprint includes a pre-configured THOTH agent (`.kiro/agents/thoth.json`) with:
-- AWS IaC MCP server for CDK best practices
-- AWS Knowledge MCP for documentation
-- ThothCTL MCP for governance and scanning
-- Git MCP for version control
-
-```bash
-kiro-cli chat --agent thoth
+```
+Source (GitHub) → Synth (Node 20 + npm ci + build + test + cdk synth)
+                      → SelfMutate (updates pipeline if changed)
+                      → Deploy-dev (AgentAccessRole → dev account)
+                      → [Manual Approval] → Deploy-qa (AgentAccessRole → qa account)
+                      → [Manual Approval] → Deploy-prd (AgentAccessRole → prd account)
 ```
 
-## Stack Layers
+Agent Spaces deploy as nested stacks within the pipeline stack itself (same account).
 
-| Layer | Purpose | Status |
-|-------|---------|--------|
-| Foundation | Core resources (S3, KMS, IAM) | ✅ Implemented |
-| Agent | AWS DevOps Agent (Agent Space, Associations, MCP) | ✅ Implemented |
-| Platform | Shared infra (VPC, ECS, ALB) | 📋 Placeholder |
-| Application | Workload resources (Lambda, DDB) | 📋 Placeholder |
+## References
 
-## AWS DevOps Agent
-
-The blueprint provisions the full DevOps Agent infrastructure via CDK:
-
-- **Agent Space** — KMS-encrypted, tagged, with operator web app (IAM or Identity Center)
-- **AWS Account Associations** — Multi-account monitoring via assumable roles
-- **MCP Server Registrations** — Connect custom/proprietary MCP servers (Splunk, New Relic, Grafana, SigV4)
-- **Private Connections** — VPC-based connectivity to MCP servers (service-managed Resource Gateway)
-
-Configure in `project_configs/environment_options.yaml`:
-
-```yaml
-devops_agent:
-  space_name: "my-agent-space"
-  monitored_accounts:
-    - account_id: "111111111111"
-      role_arn: "arn:aws:iam::111111111111:role/DevOpsAgentAccessRole"
-      regions: ["us-east-1"]
-  mcp_servers:
-    - service_type: "mcpserver"
-      name: "custom-runbooks"
-      target_url: "https://mcp.internal.example.com"
-  private_connection:
-    name: "internalmcp"
-    host_address: "10.0.1.50"
-    vpc_id: "vpc-0123456789abcdef0"
-    subnet_ids: ["subnet-aaa", "subnet-bbb"]
-    security_group_ids: ["sg-111"]
-```
-
-> **Note**: OAuth-based integrations (GitHub, Slack, Datadog) must be configured via the AWS Console.
-
-## License
-
-Apache-2.0
+- [AWS DevOps Agent Documentation](https://docs.aws.amazon.com/devopsagent/latest/userguide/)
+- [Best Practices for Deploying AWS DevOps Agent in Production](https://aws.amazon.com/blogs/devops/best-practices-for-deploying-aws-devops-agent-in-production/)
+- [Getting Started with AWS DevOps Agent using AWS CDK](https://docs.aws.amazon.com/devopsagent/latest/userguide/getting-started-with-aws-devops-agent-getting-started-with-aws-devops-agent-using-aws-cdk.html)
+- [AWS CDK Pipelines](https://docs.aws.amazon.com/cdk/v2/guide/cdk_pipeline.html)
 
 ## License
 
