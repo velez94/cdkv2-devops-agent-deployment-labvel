@@ -89,6 +89,11 @@ agent_spaces:
         account_id: "039957032026"
         regions:
           - "us-east-1"
+        # Scope topology crawl to the Athleon production workload only.
+        # Athleon is deployed as the CloudFormation stack "Athleon-production",
+        # so its resources carry this tag automatically.
+        scope_tags:
+          "aws:cloudformation:stack-name": "Athleon-production"
 
 # MCP server integrations (applied to all spaces, or per-space if needed)
 # mcp_servers:

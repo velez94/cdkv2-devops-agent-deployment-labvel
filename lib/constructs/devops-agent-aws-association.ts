@@ -1,6 +1,16 @@
 import * as devopsagent from 'aws-cdk-lib/aws-devopsagent';
 import { Construct } from 'constructs';
 
+/** Convert a Record of tags to the CfnAssociation KeyValuePair[] shape. */
+function toKeyValuePairs(
+  scopeTags?: Record<string, string>,
+): devopsagent.CfnAssociation.KeyValuePairProperty[] | undefined {
+  if (!scopeTags || Object.keys(scopeTags).length === 0) {
+    return undefined;
+  }
+  return Object.entries(scopeTags).map(([key, value]) => ({ key, value }));
+}
+
 export interface DevOpsAgentAwsAssociationProps {
   /** Agent Space ID to associate with */
   agentSpaceId: string;
@@ -10,6 +20,12 @@ export interface DevOpsAgentAwsAssociationProps {
   roleArn: string;
   /** Regions to monitor (optional, defaults to all) */
   regions?: string[];
+  /**
+   * Tag key-value pairs used to scope the topology crawl to a specific
+   * workload. Only resources carrying these tags are discovered/associated.
+   * Example: { "aws:cloudformation:stack-name": "Athleon-production" }
+   */
+  scopeTags?: Record<string, string>;
 }
 
 /**
@@ -41,6 +57,7 @@ export class DevOpsAgentAwsAssociation extends Construct {
           accountId: props.accountId,
           accountType: 'source',
           assumableRoleArn: props.roleArn,
+          tags: toKeyValuePairs(props.scopeTags),
         },
       },
     });
@@ -56,6 +73,11 @@ export interface DevOpsAgentSourceAwsAssociationProps {
   accountId: string;
   /** IAM role ARN the agent assumes in the source account */
   roleArn: string;
+  /**
+   * Tag key-value pairs used to scope the topology crawl to a specific workload.
+   * Example: { "aws:cloudformation:stack-name": "Athleon-production" }
+   */
+  scopeTags?: Record<string, string>;
 }
 
 /**
@@ -83,6 +105,7 @@ export class DevOpsAgentSourceAwsAssociation extends Construct {
           accountId: props.accountId,
           accountType: 'monitor',
           assumableRoleArn: props.roleArn,
+          tags: toKeyValuePairs(props.scopeTags),
         },
       },
     });

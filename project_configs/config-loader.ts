@@ -49,6 +49,14 @@ export interface MonitoredAccountYamlConfig {
   account_id: string;
   /** Regions to monitor in this account */
   regions?: string[];
+  /**
+   * Optional tag key-value pairs to scope the topology crawl to a specific
+   * workload in this account. Only resources carrying these tags are discovered.
+   * Example:
+   *   scope_tags:
+   *     "aws:cloudformation:stack-name": "Athleon-production"
+   */
+  scope_tags?: Record<string, string>;
 }
 
 export interface AgentSpaceYamlConfig {

@@ -49,6 +49,8 @@ export interface MonitoredAccountConfig {
   roleArn: string;
   /** Regions to monitor in this account */
   regions?: string[];
+  /** Tag key-value pairs to scope topology crawl to a specific workload */
+  scopeTags?: Record<string, string>;
 }
 
 export interface McpServerConfig {
@@ -137,6 +139,7 @@ export class DevOpsAgentStack extends cdk.Stack {
           accountId: account.accountId,
           roleArn: account.roleArn,
           regions: account.regions,
+          scopeTags: account.scopeTags,
         });
       });
     }

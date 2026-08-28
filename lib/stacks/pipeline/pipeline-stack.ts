@@ -191,6 +191,7 @@ export class PipelineStack extends cdk.Stack {
         accountId: ma.account_id,
         roleArn: `arn:aws:iam::${ma.account_id}:role/DevOpsAgentAccessRole-${spaceConfig.name}`,
         regions: ma.regions,
+        scopeTags: ma.scope_tags,
       }),
     );
 

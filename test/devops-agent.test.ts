@@ -19,6 +19,7 @@ describe('DevOpsAgent Stack', () => {
             accountId: '111111111111',
             roleArn: 'arn:aws:iam::111111111111:role/DevOpsAgentAccessRole',
             regions: ['us-east-1'],
+            scopeTags: { 'aws:cloudformation:stack-name': 'Athleon-production' },
           },
         ],
       },
@@ -68,6 +69,21 @@ describe('DevOpsAgent Stack', () => {
           AccountId: '111111111111',
           AccountType: 'source',
           AssumableRoleArn: 'arn:aws:iam::111111111111:role/DevOpsAgentAccessRole',
+        }),
+      }),
+    });
+  });
+
+  test('Association scopes topology crawl by workload tags', () => {
+    template.hasResourceProperties('AWS::DevOpsAgent::Association', {
+      Configuration: Match.objectLike({
+        SourceAws: Match.objectLike({
+          Tags: Match.arrayWith([
+            Match.objectLike({
+              Key: 'aws:cloudformation:stack-name',
+              Value: 'Athleon-production',
+            }),
+          ]),
         }),
       }),
     });
