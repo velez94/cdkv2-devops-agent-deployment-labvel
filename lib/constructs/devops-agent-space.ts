@@ -59,6 +59,31 @@ export class DevOpsAgentSpace extends Construct {
       removalPolicy: props.environment === 'prd' ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
     });
 
+    // Grant the DevOps Agent service principal access to use the CMK.
+    // Required when passing kmsKeyArn to CfnAgentSpace — otherwise the service
+    // handler returns AccessDenied because it cannot use the customer-managed key.
+    this.encryptionKey.addToResourcePolicy(
+      new iam.PolicyStatement({
+        sid: 'AllowDevOpsAgentServiceUseOfKey',
+        effect: iam.Effect.ALLOW,
+        principals: [new iam.ServicePrincipal('aidevops.amazonaws.com')],
+        actions: [
+          'kms:Encrypt',
+          'kms:Decrypt',
+          'kms:ReEncrypt*',
+          'kms:GenerateDataKey*',
+          'kms:DescribeKey',
+          'kms:CreateGrant',
+        ],
+        resources: ['*'],
+        conditions: {
+          StringEquals: {
+            'aws:SourceAccount': account,
+          },
+        },
+      }),
+    );
+
     // IAM Role: Agent Access — assumed by devops-agent service to monitor the account
     // Uses AIDevOpsAgentAccessPolicy (AWS managed) + Resource Explorer SLR inline
     this.agentAccessRole = new iam.Role(this, 'AgentAccessRole', {
