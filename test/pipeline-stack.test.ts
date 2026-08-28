@@ -3,11 +3,12 @@ import { Match, Template } from 'aws-cdk-lib/assertions';
 import { PipelineStack } from '../lib/stacks/pipeline/pipeline-stack';
 
 describe('CDK Pipelines Mode - Pipeline Stack (Hub Model)', () => {
+  let stack: PipelineStack;
   let template: Template;
 
   beforeAll(() => {
     const app = new cdk.App();
-    const stack = new PipelineStack(app, 'TestPipeline', {
+    stack = new PipelineStack(app, 'TestPipeline', {
       env: { account: '000000000000', region: 'us-east-1' },
       projectName: 'TestAgent',
       pipelineConfig: {
@@ -71,28 +72,44 @@ describe('CDK Pipelines Mode - Pipeline Stack (Hub Model)', () => {
     template.hasResource('AWS::KMS::Key', {});
   });
 
-  test('Agent Spaces are deployed in the pipeline stack (hub account)', () => {
-    // Both Agent Spaces should create their KMS keys in this stack
-    template.hasResourceProperties('AWS::DevOpsAgent::AgentSpace', {
-      Name: 'test-agent-nonprod',
-    });
-    template.hasResourceProperties('AWS::DevOpsAgent::AgentSpace', {
-      Name: 'test-agent-prod',
-    });
+  test('Agent Space nested stacks are created in the pipeline stack', () => {
+    // Agent Spaces are deployed as nested stacks (child constructs of PipelineStack)
+    // Verify they exist by checking the construct tree
+    const nonprodSpace = stack.node.tryFindChild('AgentSpace-nonprod');
+    const prodSpace = stack.node.tryFindChild('AgentSpace-prod');
+    expect(nonprodSpace).toBeDefined();
+    expect(prodSpace).toBeDefined();
   });
 
-  test('Agent Spaces have cross-account associations', () => {
-    // NonProd monitors dev + qa (2 associations + 1 SourceAws each = at least 4)
-    // Prod monitors prd (1 association + 1 SourceAws = 2)
-    template.resourceCountIs('AWS::DevOpsAgent::Association', 6);
+  test('Agent Space nonprod template has correct resources', () => {
+    // Get the nested stack template directly
+    const nonprodStack = stack.node.tryFindChild('AgentSpace-nonprod') as cdk.Stack;
+    const nonprodTemplate = Template.fromStack(nonprodStack);
+
+    nonprodTemplate.hasResourceProperties('AWS::DevOpsAgent::AgentSpace', {
+      Name: 'test-agent-nonprod',
+    });
+
+    // NonProd monitors dev + qa: 1 SourceAws + 2 Aws Associations = 3
+    nonprodTemplate.resourceCountIs('AWS::DevOpsAgent::Association', 3);
+  });
+
+  test('Agent Space prod template has correct resources', () => {
+    const prodStack = stack.node.tryFindChild('AgentSpace-prod') as cdk.Stack;
+    const prodTemplate = Template.fromStack(prodStack);
+
+    prodTemplate.hasResourceProperties('AWS::DevOpsAgent::AgentSpace', {
+      Name: 'test-agent-prod',
+    });
+
+    // Prod monitors prd: 1 SourceAws + 1 Aws Association = 2
+    prodTemplate.resourceCountIs('AWS::DevOpsAgent::Association', 2);
   });
 });
 
 describe('CDK Pipelines Mode - Without Agent Spaces', () => {
-  test('Pipeline works without agentSpaces but requires at least env mapping', () => {
+  test('Pipeline throws when deploy_order environment has no matching agent space', () => {
     const app = new cdk.App();
-    // Without agentSpaces, the pipeline should throw because deploy_order
-    // environments can't be mapped to a space
     expect(() => {
       new PipelineStack(app, 'PipelineNoAgent', {
         env: { account: '000000000000', region: 'us-east-1' },
