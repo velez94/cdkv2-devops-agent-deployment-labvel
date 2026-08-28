@@ -40,6 +40,20 @@ describe('DevOpsAgent Stack', () => {
     });
   });
 
+  test('Operator role trust policy allows sts:TagSession (required for Chat)', () => {
+    template.hasResourceProperties('AWS::IAM::Role', {
+      RoleName: Match.stringLikeRegexp('DevOpsAgentRole-WebappAdmin-.*'),
+      AssumeRolePolicyDocument: Match.objectLike({
+        Statement: Match.arrayWith([
+          Match.objectLike({
+            Action: 'sts:TagSession',
+            Principal: { Service: 'aidevops.amazonaws.com' },
+          }),
+        ]),
+      }),
+    });
+  });
+
   test('Creates KMS key with rotation enabled', () => {
     template.hasResourceProperties('AWS::KMS::Key', {
       EnableKeyRotation: true,

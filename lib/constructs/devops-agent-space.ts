@@ -133,6 +133,24 @@ export class DevOpsAgentSpace extends Construct {
       ],
     });
 
+    // The operator app relies on session tagging (aws:PrincipalTag/AgentSpaceId)
+    // to scope the AIDevOpsOperatorAppAccessPolicy permissions to this space.
+    // This tag is injected by the service via sts:TagSession, so the trust policy
+    // MUST allow it. Without this, features like the new Chat / On-Demand Tasks
+    // experience are not authorized and the console prompts to "update permissions".
+    this.operatorRole.assumeRolePolicy?.addStatements(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        principals: [new iam.ServicePrincipal('aidevops.amazonaws.com')],
+        actions: ['sts:TagSession'],
+        conditions: {
+          StringEquals: {
+            'aws:SourceAccount': account,
+          },
+        },
+      }),
+    );
+
     // Build OperatorApp configuration
     const operatorApp = this.buildOperatorAppConfig(props);
 
