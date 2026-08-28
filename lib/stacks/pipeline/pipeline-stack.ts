@@ -75,7 +75,11 @@ export class PipelineStack extends cdk.Stack {
     // Synth step: install, build, test, and synthesize
     const synthStep = new ShellStep('Synth', {
       input: source,
-      installCommands: ['npm ci'],
+      installCommands: [
+        // aws-cdk-lib >= 2.263.0 requires Node >= 20
+        'n 20',
+        'npm ci',
+      ],
       commands: ['npm run build', 'npm test', 'npx cdk synth'],
     });
 
