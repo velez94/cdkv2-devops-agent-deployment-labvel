@@ -93,53 +93,64 @@ export class PipelineStack extends cdk.Stack {
       crossAccountKeys: true,
     });
 
-    // ─── Deploy Stages: AgentAccessRole to target accounts ──────────────
-    // Build a map of environment → agent space name for role naming
-    const envToSpaceMap = this.buildEnvToSpaceMap(props.agentSpaces);
+    // ─── Interleaved deployment per Agent Space tier ───────────────────
+    // For each Agent Space, deploy the cross-account IAM roles for the
+    // accounts it monitors FIRST, then deploy the Agent Space itself.
+    // This ordering lets each tier (e.g. nonprod) complete independently
+    // without waiting behind a later tier's manual approval gate (e.g. prod).
+    //
+    // Result stage order example:
+    //   Deploy-dev → Deploy-qa → AgentSpace-nonprod
+    //   → [Approve-prd] Deploy-prd → AgentSpace-prod
 
+    // Map environment → manual_approval flag from deploy_order
+    const approvalByEnv = new Map<string, boolean>();
     for (const stageConfig of props.deployOrder) {
       const envConfig = props.environments[stageConfig.environment];
-
       if (!envConfig) {
         throw new Error(
           `deploy_order references environment "${stageConfig.environment}" ` +
             `but it is not defined in environments config.`,
         );
       }
-
-      const spaceName = envToSpaceMap.get(stageConfig.environment);
-      if (!spaceName) {
-        throw new Error(
-          `deploy_order references environment "${stageConfig.environment}" ` +
-            `but no agent_space monitors it.`,
-        );
-      }
-
-      const stage = new DeployStage(this, `Deploy-${stageConfig.environment}`, {
-        env: { account: envConfig.account, region: envConfig.region },
-        projectName: props.projectName,
-        environment: stageConfig.environment,
-        agentSpaceAccountId: pipelineAccountId,
-        agentSpaceName: spaceName,
-      });
-
-      // Add stage with optional manual approval gate
-      if (stageConfig.manual_approval) {
-        this.pipeline.addStage(stage, {
-          pre: [
-            new ManualApprovalStep(`Approve-${stageConfig.environment}`, {
-              comment: `Approve deployment to ${stageConfig.environment.toUpperCase()}`,
-            }),
-          ],
-        });
-      } else {
-        this.pipeline.addStage(stage);
-      }
+      approvalByEnv.set(stageConfig.environment, stageConfig.manual_approval);
     }
 
-    // ─── Agent Spaces: deployed via pipeline stages in hub account ─────
     if (props.agentSpaces) {
       for (const spaceConfig of props.agentSpaces) {
+        // 1. Deploy the cross-account role to each monitored account for this space
+        for (const monitored of spaceConfig.monitored_accounts) {
+          const envConfig = props.environments[monitored.environment];
+          if (!envConfig) {
+            throw new Error(
+              `Agent space "${spaceConfig.name}" references environment ` +
+                `"${monitored.environment}" not defined in environments config.`,
+            );
+          }
+
+          const roleStage = new DeployStage(this, `Deploy-${monitored.environment}`, {
+            env: { account: envConfig.account, region: envConfig.region },
+            projectName: props.projectName,
+            environment: monitored.environment,
+            agentSpaceAccountId: pipelineAccountId,
+            agentSpaceName: spaceConfig.name,
+          });
+
+          const requiresApproval = approvalByEnv.get(monitored.environment) ?? false;
+          if (requiresApproval) {
+            this.pipeline.addStage(roleStage, {
+              pre: [
+                new ManualApprovalStep(`Approve-${monitored.environment}`, {
+                  comment: `Approve deployment to ${monitored.environment.toUpperCase()}`,
+                }),
+              ],
+            });
+          } else {
+            this.pipeline.addStage(roleStage);
+          }
+        }
+
+        // 2. Deploy the Agent Space (creates associations to the roles above)
         const agentConfig = this.buildAgentConfig(
           spaceConfig,
           props.environments,
@@ -160,23 +171,6 @@ export class PipelineStack extends cdk.Stack {
         this.pipeline.addStage(agentStage);
       }
     }
-  }
-
-  /**
-   * Build a map from environment name to the Agent Space name that monitors it.
-   */
-  private buildEnvToSpaceMap(
-    agentSpaces?: AgentSpaceYamlConfig[],
-  ): Map<string, string> {
-    const map = new Map<string, string>();
-    if (!agentSpaces) return map;
-
-    for (const space of agentSpaces) {
-      for (const ma of space.monitored_accounts) {
-        map.set(ma.environment, space.name);
-      }
-    }
-    return map;
   }
 
   /**

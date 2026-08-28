@@ -23,6 +23,13 @@ export interface DevOpsAgentConfig {
   spaceDescription?: string;
   /** AWS accounts to associate (multi-account monitoring) */
   monitoredAccounts?: MonitoredAccountConfig[];
+  /**
+   * Whether to also monitor the hub (operations) account where the Agent Space
+   * lives. Defaults to false (Model B — the hub is an operations account with
+   * no workloads, so it should not be a monitored target). Set to true only if
+   * the hub account itself hosts workloads worth investigating.
+   */
+  monitorHostAccount?: boolean;
   /** MCP server integrations */
   mcpServers?: McpServerConfig[];
   /** Private connection for MCP servers in VPC */
@@ -95,13 +102,16 @@ export class DevOpsAgentStack extends cdk.Stack {
       identityCenterInstanceArn: agentConfig.identityCenterInstanceArn,
     });
 
-    // 2. SourceAws Association — the hosting account itself
-    // This enables the agent to monitor the account where the Agent Space lives
-    new DevOpsAgentSourceAwsAssociation(this, 'SourceAwsAssociation', {
-      agentSpaceId: this.agentSpace.agentSpaceId,
-      accountId: this.account,
-      roleArn: this.agentSpace.agentAccessRole.roleArn,
-    });
+    // 2. Host account association — only if explicitly enabled (Model B default: off)
+    // The hub/operations account typically has no workloads worth monitoring.
+    // When enabled, it uses the "Aws"/monitor type (required for the local account).
+    if (agentConfig.monitorHostAccount) {
+      new DevOpsAgentSourceAwsAssociation(this, 'SourceAwsAssociation', {
+        agentSpaceId: this.agentSpace.agentSpaceId,
+        accountId: this.account,
+        roleArn: this.agentSpace.agentAccessRole.roleArn,
+      });
+    }
 
     // 3. Private Connection (if needed for MCP servers in VPC)
     let privateConnection: DevOpsAgentPrivateConnection | undefined;

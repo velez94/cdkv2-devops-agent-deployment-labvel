@@ -94,8 +94,8 @@ describe('DevOpsAgent Stack with MCP Servers', () => {
   });
 
   test('Creates associations for each MCP server', () => {
-    // 2 MCP associations + 1 SourceAws association (hosting account)
-    template.resourceCountIs('AWS::DevOpsAgent::Association', 3);
+    // 2 MCP associations (Model B: no host self-association by default)
+    template.resourceCountIs('AWS::DevOpsAgent::Association', 2);
   });
 
   test('MCP service has correct type', () => {
