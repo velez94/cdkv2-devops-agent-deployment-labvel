@@ -15,7 +15,8 @@ import {
   PrivateConnectionYamlConfig,
 } from '../../../project_configs/config-loader';
 import { DeployStage } from './deploy-stage';
-import { DevOpsAgentStack, DevOpsAgentConfig, MonitoredAccountConfig } from '../agent/devops-agent-stack';
+import { AgentSpaceStage } from './agent-space-stage';
+import { DevOpsAgentConfig, MonitoredAccountConfig } from '../agent/devops-agent-stack';
 
 export interface PipelineStackProps extends cdk.StackProps {
   projectName: string;
@@ -136,7 +137,7 @@ export class PipelineStack extends cdk.Stack {
       }
     }
 
-    // ─── Agent Spaces: deployed directly in pipeline account ────────────
+    // ─── Agent Spaces: deployed via pipeline stages in hub account ─────
     if (props.agentSpaces) {
       for (const spaceConfig of props.agentSpaces) {
         const agentConfig = this.buildAgentConfig(
@@ -149,11 +150,14 @@ export class PipelineStack extends cdk.Stack {
           props.identityCenterInstanceArn,
         );
 
-        new DevOpsAgentStack(this, `AgentSpace-${spaceConfig.tier}`, {
+        const agentStage = new AgentSpaceStage(this, `AgentSpace-${spaceConfig.tier}`, {
+          env: { account: pipelineAccountId, region: this.region },
           projectName: props.projectName,
-          environment: spaceConfig.tier,
           agentConfig,
+          tier: spaceConfig.tier,
         });
+
+        this.pipeline.addStage(agentStage);
       }
     }
   }

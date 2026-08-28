@@ -72,38 +72,24 @@ describe('CDK Pipelines Mode - Pipeline Stack (Hub Model)', () => {
     template.hasResource('AWS::KMS::Key', {});
   });
 
-  test('Agent Space nested stacks are created in the pipeline stack', () => {
-    // Agent Spaces are deployed as nested stacks (child constructs of PipelineStack)
-    // Verify they exist by checking the construct tree
-    const nonprodSpace = stack.node.tryFindChild('AgentSpace-nonprod');
-    const prodSpace = stack.node.tryFindChild('AgentSpace-prod');
-    expect(nonprodSpace).toBeDefined();
-    expect(prodSpace).toBeDefined();
+  test('Pipeline has stages for Agent Space deployment', () => {
+    // The pipeline should have stages for AgentSpace-nonprod and AgentSpace-prod
+    template.hasResourceProperties('AWS::CodePipeline::Pipeline', {
+      Stages: Match.arrayWith([
+        Match.objectLike({ Name: 'AgentSpace-nonprod' }),
+        Match.objectLike({ Name: 'AgentSpace-prod' }),
+      ]),
+    });
   });
 
-  test('Agent Space nonprod template has correct resources', () => {
-    // Get the nested stack template directly
-    const nonprodStack = stack.node.tryFindChild('AgentSpace-nonprod') as cdk.Stack;
-    const nonprodTemplate = Template.fromStack(nonprodStack);
-
-    nonprodTemplate.hasResourceProperties('AWS::DevOpsAgent::AgentSpace', {
-      Name: 'test-agent-nonprod',
+  test('Pipeline has stages for cross-account IAM role deployment', () => {
+    template.hasResourceProperties('AWS::CodePipeline::Pipeline', {
+      Stages: Match.arrayWith([
+        Match.objectLike({ Name: 'Deploy-dev' }),
+        Match.objectLike({ Name: 'Deploy-qa' }),
+        Match.objectLike({ Name: 'Deploy-prd' }),
+      ]),
     });
-
-    // NonProd monitors dev + qa: 1 SourceAws + 2 Aws Associations = 3
-    nonprodTemplate.resourceCountIs('AWS::DevOpsAgent::Association', 3);
-  });
-
-  test('Agent Space prod template has correct resources', () => {
-    const prodStack = stack.node.tryFindChild('AgentSpace-prod') as cdk.Stack;
-    const prodTemplate = Template.fromStack(prodStack);
-
-    prodTemplate.hasResourceProperties('AWS::DevOpsAgent::AgentSpace', {
-      Name: 'test-agent-prod',
-    });
-
-    // Prod monitors prd: 1 SourceAws + 1 Aws Association = 2
-    prodTemplate.resourceCountIs('AWS::DevOpsAgent::Association', 2);
   });
 });
 
