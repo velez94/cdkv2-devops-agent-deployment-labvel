@@ -25,6 +25,16 @@ export interface DevOpsAgentSpaceProps {
   identityCenterInstanceArn?: string;
   /** Operator app IAM role ARN (required for IAM auth) */
   operatorAppRoleArn?: string;
+  /**
+   * IAM principal ARNs (e.g. Identity Center permission-set roles) that operate
+   * the incidents web app. They are granted use of the Agent Space CMK for the
+   * SYNCHRONOUS operations the web app performs (key validation, decrypt of
+   * space data), scoped by `kms:ViaService: aidevops.<region>.amazonaws.com`.
+   * Without this, the console shows "The customer managed KMS key cannot be
+   * accessed." Supports wildcards (e.g. an SSO reserved-role path pattern).
+   * See: docs.aws.amazon.com/devopsagent/.../encryption-at-rest-for-devops-agent.html
+   */
+  callerPrincipalArns?: string[];
 }
 
 /**
@@ -86,7 +96,34 @@ export class DevOpsAgentSpace extends Construct {
       }),
     );
 
-    // IAM Role: Agent Access — assumed by devops-agent service to monitor the account
+    // Grant the WEB APP CALLER principals use of the CMK for SYNCHRONOUS operations.
+    // The DevOps Agent web app validates the key and decrypts Agent Space data using
+    // the *caller's* credentials (your Identity Center permission-set role), not just
+    // the service principal. Scope to DevOps Agent via `kms:ViaService` so the grant
+    // cannot be used for anything else. Without this the console reports:
+    //   "The customer managed KMS key cannot be accessed."
+    if (props.callerPrincipalArns && props.callerPrincipalArns.length > 0) {
+      this.encryptionKey.addToResourcePolicy(
+        new iam.PolicyStatement({
+          sid: 'AllowCallerAccessViaService',
+          effect: iam.Effect.ALLOW,
+          principals: props.callerPrincipalArns.map((arn) => new iam.ArnPrincipal(arn)),
+          actions: [
+            'kms:DescribeKey',
+            'kms:GenerateDataKey*',
+            'kms:Decrypt',
+            'kms:Encrypt',
+            'kms:ReEncrypt*',
+          ],
+          resources: ['*'],
+          conditions: {
+            StringEquals: {
+              'kms:ViaService': `aidevops.${region}.amazonaws.com`,
+            },
+          },
+        }),
+      );
+    }
     // Uses AIDevOpsAgentAccessPolicy (AWS managed) + Resource Explorer SLR inline
     this.agentAccessRole = new iam.Role(this, 'AgentAccessRole', {
       roleName: `DevOpsAgentRole-AgentSpace-${props.spaceName}`,
@@ -148,6 +185,22 @@ export class DevOpsAgentSpace extends Construct {
             'aws:SourceAccount': account,
           },
         },
+      }),
+    );
+
+    // Grant the OPERATOR APP role use of the CMK. The web app decrypts Agent Space
+    // data using this role's credentials, so it needs BOTH a key-policy grant AND an
+    // identity-based policy allowing kms:Decrypt. grantEncryptDecrypt() adds both.
+    // Without it the console fails with:
+    //   "... is not authorized to perform: kms:Decrypt ... because no identity-based
+    //    policy allows the kms:Decrypt action"  (see CloudTrail).
+    this.encryptionKey.grantEncryptDecrypt(this.operatorRole);
+    this.operatorRole.addToPolicy(
+      new iam.PolicyStatement({
+        sid: 'AllowDescribeAgentSpaceKey',
+        effect: iam.Effect.ALLOW,
+        actions: ['kms:DescribeKey'],
+        resources: [this.encryptionKey.keyArn],
       }),
     );
 
